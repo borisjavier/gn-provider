@@ -1,0 +1,36 @@
+{
+  "name": "gn-provider",
+  "version": "1.1.5",
+  "files": [
+    "dist",
+    "scripts",
+    "README.md"
+  ],
+  "scripts": {
+    "postinstall": "node scripts/install.js"
+  },
+  "peerDependencies": {
+    "scrypt-ts": "^1.4.5"
+  },
+  "keywords": [
+    "bsv",
+    "scrypt",
+    "provider",
+    "bitcoin",
+    "whatsonchain"],
+  "main": "dist/gn-provider.js",
+  "types": "dist/gn-provider.d.ts",
+  "author": "BJ",
+  "license": "MIT",
+  "description": "This is a BSV blockchain provider for sCrpyt using Whatsonchain API",
+  "dependencies": {
+    "fs-extra": "^11.3.0",
+    "typescript": "^5.8.3",
+    "scryptlib": "^2.2.6",
+    "superagent": "^10.2.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.3",
+    "@types/superagent": "^8.1.9"
+  }
+}

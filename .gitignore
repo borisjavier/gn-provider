@@ -1,0 +1,2 @@
+# Crea un archivo .gitignore para Node.js
+echo "node_modules/" >> .gitignore
