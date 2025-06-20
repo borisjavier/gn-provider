@@ -259,13 +259,19 @@ export class GNProvider extends Provider {
         }
     }
 
-    private needIgnoreError(inMsg: string): boolean {
+    /*private needIgnoreError(inMsg: string): boolean {
+        if (inMsg.includes('Transaction already in the mempool')) return true;
+        if (inMsg.includes('txn-already-known')) return true;
+        return false;
+    }*/
+    private needIgnoreError = (inMsg: string): boolean => {
         if (inMsg.includes('Transaction already in the mempool')) return true;
         if (inMsg.includes('txn-already-known')) return true;
         return false;
     }
 
-    private friendlyBIP22RejectionMsg(inMsg: string): string {
+    //private friendlyBIP22RejectionMsg(inMsg: string): string {
+    private friendlyBIP22RejectionMsg = (inMsg: string): string => {
         const messages: Record<string, string> = {
             'bad-txns-vin-empty': 'Transaction is missing inputs.',
             'bad-txns-vout-empty': 'Transaction is missing outputs.',
