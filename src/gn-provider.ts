@@ -1,17 +1,18 @@
-// Agrega esto al inicio del archivo
-// @ts-ignore
 import { EventEmitter } from 'events';
 import * as scryptlib from 'scryptlib';
 import { Provider, TransactionResponse, TxHash, UtxoQueryOptions } from 'scrypt-ts/dist/bsv/abstract-provider';
 import * as superagent from 'superagent';
 import { filterUTXO } from 'scrypt-ts/dist/bsv/utils';
 import { AddressOption, UTXO } from 'scrypt-ts/dist/bsv/types';
-//import { EventEmitter } from 'events';
 
 enum ProviderEvent {
     Connected = "connected",
     NetworkChange = "networkChange"
 }
+
+export type UTXOWithHeight = UTXO & {
+    height: number;
+};
 
 export class GNProvider extends Provider {
     emit!: (event: ProviderEvent, ...args: any[]) => boolean;
@@ -27,19 +28,11 @@ export class GNProvider extends Provider {
         };
     }
 
-    /*get apiPrefix(): string {
-        const networkStr = this._network.name === scryptlib.bsv.Networks.mainnet.name ? 'main' : 'test';
-        return `https://api.whatsonchain.com/v1/bsv/${networkStr}`;
-    }*/
-   /*apiPrefix = (): string => {
-        const networkStr = this._network.name === scryptlib.bsv.Networks.mainnet.name ? 'main' : 'test';
-        return `https://api.whatsonchain.com/v1/bsv/${networkStr}`;
-    }*/
 
    connect = async (): Promise<this> => {
         try {
             const headers = this._getHeaders();
-            const res = await superagent.get(`${this.apiPrefix()}/woc`)//`${this.apiPrefix}/woc`) 
+            const res = await superagent.get(`${this.apiPrefix()}/woc`)
                 .timeout(3000)
                 .set(headers);
 
@@ -56,7 +49,6 @@ export class GNProvider extends Provider {
         }
     }
 
-        //async getFeePerKb(): Promise<number> {
     getFeePerKb = async (): Promise<number> => {
         await this._ready();
         const headers = this._getHeaders();
@@ -79,14 +71,13 @@ export class GNProvider extends Provider {
             }
             throw new Error("No fee data available");
         } catch (error) {
-            return 1.05; // Valor de fallback
+            return 1.05; 
         }
     }
 
    constructor(network: scryptlib.bsv.Networks.Network, apiKey = '') {
         super();
         
-        // Inicializa propiedades primero
         this._network = network;
         this._apiKey = apiKey;
         this._isConnected = false;
@@ -96,49 +87,21 @@ export class GNProvider extends Provider {
             return `https://api.whatsonchain.com/v1/bsv/${networkStr}`;
         };
         
-        // Configura EventEmitter
         Object.setPrototypeOf(this, EventEmitter.prototype);
         
-        // Conexión directa
         this.connect().catch(console.error);
     }
-
-        /*isConnected(): boolean {
-        return this._isConnected;
-    }*/
    isConnected = (): boolean => this._isConnected;
 
-    /*private _getHeaders() {
-        return {
-            'Content-Type': 'application/json',
-            ...(this._apiKey ? { 'woc-api-key': this._apiKey } : {})
-        };
-    }*/
-
-    /*updateNetwork(network: scryptlib.bsv.Networks.Network): void {
-        this._network = network;
-        this.emit(ProviderEvent.NetworkChange, network);
-    }*/
 
     updateNetwork = (network: scryptlib.bsv.Networks.Network): void => {
         this._network = network;
         this.emit(ProviderEvent.NetworkChange, network);
     }
 
-    /*getNetwork(): scryptlib.bsv.Networks.Network {
-        return this._network;
-    }*/
     getNetwork = (): scryptlib.bsv.Networks.Network => this._network;
 
-    /*protected async _ready(): Promise<void> {
-        if (!this.isConnected()) {
-            try {
-                await this.connect();
-            } catch (error) {
-                throw error;
-            }
-        }
-    }*/
+
    protected _ready = async (): Promise<void> => {
         if (!this.isConnected()) {
             try {
@@ -149,12 +112,11 @@ export class GNProvider extends Provider {
         }
     }
 
-    //async sendRawTransaction(rawTxHex: string): Promise<TxHash> {
     sendRawTransaction = async (rawTxHex: string): Promise<TxHash> => {
         await this._ready();
         const headers = this._getHeaders();
-        const size = Math.max(1, rawTxHex.length / 2 / 1024); // Tamaño en KB
-        const timeout = Math.max(10000, 1000 * size); // Timeout dinámico
+        const size = Math.max(1, rawTxHex.length / 2 / 1024); 
+        const timeout = Math.max(10000, 1000 * size); 
         
         try {
             const res = await superagent.post(`${this.apiPrefix()}/tx/raw`)
@@ -177,13 +139,11 @@ export class GNProvider extends Provider {
         }
     }
 
-// Implementación correcta de sendTransaction
     sendTransaction = async (signedTx: scryptlib.bsv.Transaction): Promise<string> => {
     try {
         const txHex = signedTx.serialize({ disableIsFullySigned: true });
         return await this.sendRawTransaction(txHex);
     } catch (error) {
-        // Manejo seguro del error unknown
         let errorMessage = "Unknown error occurred";
         
         if (error instanceof Error) {
@@ -200,26 +160,24 @@ export class GNProvider extends Provider {
     }
 }
 
-    //async listUnspent(address: AddressOption, options?: UtxoQueryOptions): Promise<UTXO[]> {
-    listUnspent = async (address: AddressOption, options?: UtxoQueryOptions): Promise<UTXO[]> => {
+    listUnspent = async (address: AddressOption, options?: UtxoQueryOptions): Promise<UTXOWithHeight[]> => {
         await this._ready();
         const headers = this._getHeaders();
         
         const res = await superagent.get(`${this.apiPrefix()}/address/${address}/unspent`)
             .set(headers);
             
-        const utxos = res.body.map((item: any) => ({
+        return res.body.map((item: any) => ({
             txId: item.tx_hash,
             outputIndex: item.tx_pos,
             satoshis: item.value,
             script: scryptlib.bsv.Script.buildPublicKeyHashOut(address).toHex(),
+            height: item.height
         }));
         
-        return options ? filterUTXO(utxos, options) : utxos;
+        //return options ? filterUTXO(utxos, options) : utxos;
     }
 
-    
-    //async getBalance(address: AddressOption): Promise<{ confirmed: number; unconfirmed: number }> {
     getBalance = async (address: AddressOption): Promise<{ confirmed: number; unconfirmed: number }> => {
         try {
             const headers = this._getHeaders();
@@ -240,8 +198,6 @@ export class GNProvider extends Provider {
         }
     }
 
-
-    //async getTransaction(txHash: string): Promise<TransactionResponse> {
     getTransaction = async (txHash: string): Promise<TransactionResponse> => {   
         await this._ready();
         const headers = this._getHeaders();
@@ -259,18 +215,13 @@ export class GNProvider extends Provider {
         }
     }
 
-    /*private needIgnoreError(inMsg: string): boolean {
-        if (inMsg.includes('Transaction already in the mempool')) return true;
-        if (inMsg.includes('txn-already-known')) return true;
-        return false;
-    }*/
     private needIgnoreError = (inMsg: string): boolean => {
         if (inMsg.includes('Transaction already in the mempool')) return true;
         if (inMsg.includes('txn-already-known')) return true;
         return false;
     }
 
-    //private friendlyBIP22RejectionMsg(inMsg: string): string {
+
     private friendlyBIP22RejectionMsg = (inMsg: string): string => {
         const messages: Record<string, string> = {
             'bad-txns-vin-empty': 'Transaction is missing inputs.',

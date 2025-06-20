@@ -256,6 +256,40 @@ class GNProvider extends abstract_provider_1.Provider {
                 throw new Error(`Error fetching transaction: ${error.message}`);
             }
         });
+        /*private needIgnoreError(inMsg: string): boolean {
+            if (inMsg.includes('Transaction already in the mempool')) return true;
+            if (inMsg.includes('txn-already-known')) return true;
+            return false;
+        }*/
+        this.needIgnoreError = (inMsg) => {
+            if (inMsg.includes('Transaction already in the mempool'))
+                return true;
+            if (inMsg.includes('txn-already-known'))
+                return true;
+            return false;
+        };
+        //private friendlyBIP22RejectionMsg(inMsg: string): string {
+        this.friendlyBIP22RejectionMsg = (inMsg) => {
+            const messages = {
+                'bad-txns-vin-empty': 'Transaction is missing inputs.',
+                'bad-txns-vout-empty': 'Transaction is missing outputs.',
+                'bad-txns-oversize': 'Transaction is too large.',
+                'bad-txns-vout-negative': 'Transaction output value is negative.',
+                'bad-txns-vout-toolarge': 'Transaction output value is too large.',
+                'bad-txns-txouttotal-toolarge': 'Transaction total output value is too large.',
+                'bad-txns-prevout-null': 'Transaction inputs previous TX reference is null.',
+                'bad-txns-inputs-duplicate': 'Transaction contains duplicate inputs.',
+                'bad-txns-inputs-too-large': 'Transaction inputs too large.',
+                'bad-txns-fee-negative': 'Transaction network fee is negative.',
+                'bad-txns-fee-outofrange': 'Transaction network fee is out of range.',
+                'mandatory-script-verify-flag-failed': 'Script evaluation failed.'
+            };
+            for (const [key, msg] of Object.entries(messages)) {
+                if (inMsg.includes(key))
+                    return msg;
+            }
+            return inMsg;
+        };
         // Inicializa propiedades primero
         this._network = network;
         this._apiKey = apiKey;
@@ -268,34 +302,6 @@ class GNProvider extends abstract_provider_1.Provider {
         Object.setPrototypeOf(this, events_1.EventEmitter.prototype);
         // Conexión directa
         this.connect().catch(console.error);
-    }
-    needIgnoreError(inMsg) {
-        if (inMsg.includes('Transaction already in the mempool'))
-            return true;
-        if (inMsg.includes('txn-already-known'))
-            return true;
-        return false;
-    }
-    friendlyBIP22RejectionMsg(inMsg) {
-        const messages = {
-            'bad-txns-vin-empty': 'Transaction is missing inputs.',
-            'bad-txns-vout-empty': 'Transaction is missing outputs.',
-            'bad-txns-oversize': 'Transaction is too large.',
-            'bad-txns-vout-negative': 'Transaction output value is negative.',
-            'bad-txns-vout-toolarge': 'Transaction output value is too large.',
-            'bad-txns-txouttotal-toolarge': 'Transaction total output value is too large.',
-            'bad-txns-prevout-null': 'Transaction inputs previous TX reference is null.',
-            'bad-txns-inputs-duplicate': 'Transaction contains duplicate inputs.',
-            'bad-txns-inputs-too-large': 'Transaction inputs too large.',
-            'bad-txns-fee-negative': 'Transaction network fee is negative.',
-            'bad-txns-fee-outofrange': 'Transaction network fee is out of range.',
-            'mandatory-script-verify-flag-failed': 'Script evaluation failed.'
-        };
-        for (const [key, msg] of Object.entries(messages)) {
-            if (inMsg.includes(key))
-                return msg;
-        }
-        return inMsg;
     }
 }
 exports.GNProvider = GNProvider;
