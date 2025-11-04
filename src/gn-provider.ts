@@ -54,24 +54,40 @@ export class GNProvider extends Provider {
         const headers = this._getHeaders();
         
         try {
-            const now = Math.floor(Date.now() / 1000);
-            const from = now - 1800; // 30 minutos atrás
-            const res = await superagent.get(`${this.apiPrefix()}/miner/fees?from=${from}&to=${now}`)
+            // Paso 1: Obtener la información de la cadena para obtener la altura actual
+            const chainInfoRes = await superagent.get(`${this.apiPrefix()}/chain/info`)
                 .set(headers);
-                
-            if (res.body && Array.isArray(res.body) && res.body.length > 0) {
-                const totalFeeRate = res.body.reduce((sum: number, minerData: any) => {
-                    return sum + minerData.min_fee_rate;
-                }, 0);
-                
-                const averageFeeRate = totalFeeRate / res.body.length;
-                const feeRateWithMargin = averageFeeRate * 1.3;
-                
-                return Math.round(feeRateWithMargin * 100) / 100;
+            
+            const currentHeight = chainInfoRes.body.blocks;
+            
+            // Paso 2: Obtener las estadísticas del bloque actual
+            const blockStatsRes = await superagent.get(`${this.apiPrefix()}/block/height/${currentHeight}/stats`)
+                .set(headers);
+            
+            const blockStats = blockStatsRes.body;
+            const totalFee = blockStats.total_fee;
+            const size = blockStats.size;
+            
+            // Si el tamaño es 0, evitar división por cero
+            if (size === 0) {
+                throw new Error('Block size is zero');
             }
-            throw new Error("No fee data available");
+            
+            // Calcular tarifa por kilobyte: (total_fee * 1024) / size
+            const feePerKb = (totalFee * 1024) / size;
+            
+            // Aplicar un multiplicador para asegurar una tarifa competitiva (1.5x)
+            const competitiveFee = feePerKb * 1.5;
+            
+            // Establecer un mínimo de 50 sat/kb y un máximo de 5000 sat/kb para evitar valores extremos
+            const safeFee = Math.max(50, Math.min(competitiveFee, 5000));
+            
+            console.log(`Calculated fee rate: ${safeFee.toFixed(2)} sat/kb from block ${currentHeight}`);
+            return Math.round(safeFee * 100) / 100;
+            
         } catch (error) {
-            return 1.05; 
+            console.warn('Fee estimation from block stats failed, using fallback');
+            return 500; // Fallback a 500 sat/kb
         }
     }
 
