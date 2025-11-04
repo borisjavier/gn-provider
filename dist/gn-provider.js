@@ -47,11 +47,15 @@ const events_1 = require("events");
 const scryptlib = __importStar(require("scryptlib"));
 const abstract_provider_1 = require("scrypt-ts/dist/bsv/abstract-provider");
 const superagent = __importStar(require("superagent"));
+const utils_1 = require("scrypt-ts/dist/bsv/utils");
 var ProviderEvent;
 (function (ProviderEvent) {
     ProviderEvent["Connected"] = "connected";
     ProviderEvent["NetworkChange"] = "networkChange";
 })(ProviderEvent || (ProviderEvent = {}));
+/*export type UTXOWithHeight = UTXO & {
+    height: number;
+};*/
 class GNProvider extends abstract_provider_1.Provider {
     constructor(network, apiKey = '') {
         super();
@@ -178,16 +182,20 @@ class GNProvider extends abstract_provider_1.Provider {
         this.listUnspent = (address, options) => __awaiter(this, void 0, void 0, function* () {
             yield this._ready();
             const headers = this._getHeaders();
-            const res = yield superagent.get(`${this.apiPrefix()}/address/${address}/unspent`)
-                .set(headers);
-            return res.body.map((item) => ({
-                txId: item.tx_hash,
-                outputIndex: item.tx_pos,
-                satoshis: item.value,
-                script: scryptlib.bsv.Script.buildPublicKeyHashOut(address).toHex(),
-                height: item.height
-            }));
-            //return options ? filterUTXO(utxos, options) : utxos;
+            try {
+                const res = yield superagent.get(`${this.apiPrefix()}/address/${address}/unspent`)
+                    .set(headers);
+                const utxos = res.body.map((item) => ({
+                    txId: item.tx_hash,
+                    outputIndex: item.tx_pos,
+                    satoshis: item.value,
+                    script: item.script, // ✅ CORRECTO - script real de la blockchain //scryptlib.bsv.Script.buildPublicKeyHashOut(address).toHex(),
+                }));
+                return options ? (0, utils_1.filterUTXO)(utxos, options) : utxos;
+            }
+            catch (error) {
+                throw new Error(`Failed to list UTXOs for address ${address}: ${error.message}`);
+            }
         });
         this.getBalance = (address) => __awaiter(this, void 0, void 0, function* () {
             try {
@@ -209,6 +217,7 @@ class GNProvider extends abstract_provider_1.Provider {
             }
         });
         this.getTransaction = (txHash) => __awaiter(this, void 0, void 0, function* () {
+            var _a;
             yield this._ready();
             const headers = this._getHeaders();
             try {
@@ -220,13 +229,18 @@ class GNProvider extends abstract_provider_1.Provider {
                 throw new Error(`Transaction not found: ${txHash}`);
             }
             catch (error) {
-                throw new Error(`Error fetching transaction: ${error.message}`);
+                if (((_a = error.response) === null || _a === void 0 ? void 0 : _a.status) === 404) {
+                    throw new Error(`Transaction not found: ${txHash}`);
+                }
+                throw new Error(`Error fetching transaction ${txHash}: ${error.message}`);
             }
         });
         this.needIgnoreError = (inMsg) => {
             if (inMsg.includes('Transaction already in the mempool'))
                 return true;
             if (inMsg.includes('txn-already-known'))
+                return true;
+            if (inMsg.includes('Missing inputs'))
                 return true;
             return false;
         };
@@ -243,7 +257,8 @@ class GNProvider extends abstract_provider_1.Provider {
                 'bad-txns-inputs-too-large': 'Transaction inputs too large.',
                 'bad-txns-fee-negative': 'Transaction network fee is negative.',
                 'bad-txns-fee-outofrange': 'Transaction network fee is out of range.',
-                'mandatory-script-verify-flag-failed': 'Script evaluation failed.'
+                'mandatory-script-verify-flag-failed': 'Script evaluation failed.',
+                'Missing inputs': 'Transaction inputs are missing or already spent.'
             };
             for (const [key, msg] of Object.entries(messages)) {
                 if (inMsg.includes(key))

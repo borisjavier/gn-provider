@@ -5,9 +5,6 @@ declare enum ProviderEvent {
     Connected = "connected",
     NetworkChange = "networkChange"
 }
-export type UTXOWithHeight = UTXO & {
-    height: number;
-};
 export declare class GNProvider extends Provider {
     emit: (event: ProviderEvent, ...args: any[]) => boolean;
     private _network;
@@ -24,7 +21,7 @@ export declare class GNProvider extends Provider {
     protected _ready: () => Promise<void>;
     sendRawTransaction: (rawTxHex: string) => Promise<TxHash>;
     sendTransaction: (signedTx: scryptlib.bsv.Transaction) => Promise<string>;
-    listUnspent: (address: AddressOption, options?: UtxoQueryOptions) => Promise<UTXOWithHeight[]>;
+    listUnspent: (address: AddressOption, options?: UtxoQueryOptions) => Promise<UTXO[]>;
     getBalance: (address: AddressOption) => Promise<{
         confirmed: number;
         unconfirmed: number;
