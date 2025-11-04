@@ -188,7 +188,7 @@ export class GNProvider extends Provider {
                 txId: item.tx_hash,
                 outputIndex: item.tx_pos,
                 satoshis: item.value,
-                script: item.script, // ✅ CORRECTO - script real de la blockchain //scryptlib.bsv.Script.buildPublicKeyHashOut(address).toHex(),
+                script: scryptlib.bsv.Script.buildPublicKeyHashOut(address).toHex(), //item.script, // ✅ CORRECTO - script real de la blockchain //
             }));
             
             return options ? filterUTXO(utxos, options) : utxos;
