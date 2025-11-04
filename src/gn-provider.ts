@@ -10,9 +10,9 @@ enum ProviderEvent {
     NetworkChange = "networkChange"
 }
 
-export type UTXOWithHeight = UTXO & {
+/*export type UTXOWithHeight = UTXO & {
     height: number;
-};
+};*/
 
 export class GNProvider extends Provider {
     emit!: (event: ProviderEvent, ...args: any[]) => boolean;
@@ -176,22 +176,25 @@ export class GNProvider extends Provider {
     }
 }
 
-    listUnspent = async (address: AddressOption, options?: UtxoQueryOptions): Promise<UTXOWithHeight[]> => {
+    listUnspent = async (address: AddressOption, options?: UtxoQueryOptions): Promise<UTXO[]> => {
         await this._ready();
         const headers = this._getHeaders();
-        
-        const res = await superagent.get(`${this.apiPrefix()}/address/${address}/unspent`)
-            .set(headers);
+
+        try {
+            const res = await superagent.get(`${this.apiPrefix()}/address/${address}/unspent`)
+                .set(headers);
+                
+            const utxos: UTXO[] = res.body.map((item: any) => ({
+                txId: item.tx_hash,
+                outputIndex: item.tx_pos,
+                satoshis: item.value,
+                script: item.script, // ✅ CORRECTO - script real de la blockchain //scryptlib.bsv.Script.buildPublicKeyHashOut(address).toHex(),
+            }));
             
-        return res.body.map((item: any) => ({
-            txId: item.tx_hash,
-            outputIndex: item.tx_pos,
-            satoshis: item.value,
-            script: scryptlib.bsv.Script.buildPublicKeyHashOut(address).toHex(),
-            height: item.height
-        }));
-        
-        //return options ? filterUTXO(utxos, options) : utxos;
+            return options ? filterUTXO(utxos, options) : utxos;
+        } catch (error: any) {
+            throw new Error(`Failed to list UTXOs for address ${address}: ${error.message}`);
+        }
     }
 
     getBalance = async (address: AddressOption): Promise<{ confirmed: number; unconfirmed: number }> => {
@@ -227,13 +230,17 @@ export class GNProvider extends Provider {
             }
             throw new Error(`Transaction not found: ${txHash}`);
         } catch (error: any) {
-            throw new Error(`Error fetching transaction: ${error.message}`);
+            if (error.response?.status === 404) {
+                throw new Error(`Transaction not found: ${txHash}`);
+            }
+            throw new Error(`Error fetching transaction ${txHash}: ${error.message}`);
         }
     }
 
     private needIgnoreError = (inMsg: string): boolean => {
         if (inMsg.includes('Transaction already in the mempool')) return true;
         if (inMsg.includes('txn-already-known')) return true;
+        if (inMsg.includes('Missing inputs')) return true;
         return false;
     }
 
@@ -251,7 +258,8 @@ export class GNProvider extends Provider {
             'bad-txns-inputs-too-large': 'Transaction inputs too large.',
             'bad-txns-fee-negative': 'Transaction network fee is negative.',
             'bad-txns-fee-outofrange': 'Transaction network fee is out of range.',
-            'mandatory-script-verify-flag-failed': 'Script evaluation failed.'
+            'mandatory-script-verify-flag-failed': 'Script evaluation failed.',
+            'Missing inputs': 'Transaction inputs are missing or already spent.'
         };
 
         for (const [key, msg] of Object.entries(messages)) {
