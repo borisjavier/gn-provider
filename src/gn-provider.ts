@@ -18,13 +18,15 @@ export class GNProvider extends Provider {
     emit!: (event: ProviderEvent, ...args: any[]) => boolean;
     private _network: scryptlib.bsv.Networks.Network;
     private _isConnected = false;
-    private _apiKey: string;
+    private _wocApiKey: string;
+    private _gorillaPoolApiKey: string;
     private apiPrefix!: () => string;
+    private _mapiURL: string;
 
     private _getHeaders = () => {
         return {
             'Content-Type': 'application/json',
-            ...(this._apiKey ? { 'woc-api-key': this._apiKey } : {})
+            ...(this._wocApiKey ? { 'woc-api-key': this._wocApiKey } : {})
         };
     }
 
@@ -91,12 +93,16 @@ export class GNProvider extends Provider {
         }
     }
 
-   constructor(network: scryptlib.bsv.Networks.Network, apiKey = '') {
+   constructor(network: scryptlib.bsv.Networks.Network, wocApiKey = '', gpApiKey = '') {
         super();
         
         this._network = network;
-        this._apiKey = apiKey;
+        this._wocApiKey = wocApiKey;
+        this._gorillaPoolApiKey = gpApiKey;
         this._isConnected = false;
+        this._mapiURL = network == scryptlib.bsv.Networks.mainnet ?
+                    'https://mapi.gorillapool.io/mapi/' :
+                    'https://testnet-mapi.gorillapool.io/mapi/';
 
         this.apiPrefix = () => {
             const networkStr = this._network.name === scryptlib.bsv.Networks.mainnet.name ? 'main' : 'test';
@@ -128,7 +134,7 @@ export class GNProvider extends Provider {
         }
     }
 
-    sendRawTransaction = async (rawTxHex: string): Promise<TxHash> => {
+    /*sendRawTransaction = async (rawTxHex: string): Promise<TxHash> => {
         await this._ready();
         const headers = this._getHeaders();
         const size = Math.max(1, rawTxHex.length / 2 / 1024); 
@@ -144,6 +150,143 @@ export class GNProvider extends Provider {
                 .send({ txhex: rawTxHex });
                 
             return res.body;
+        } catch (error: any) {
+            if (error.response?.text) {
+                if (this.needIgnoreError(error.response.text)) {
+                    return new scryptlib.bsv.Transaction(rawTxHex).id;
+                }
+                throw new Error(`GNProvider ERROR: ${this.friendlyBIP22RejectionMsg(error.response.text)}`);
+            }
+            throw new Error(`GNProvider ERROR: ${error.message}`);
+        }
+    }*/
+
+    /*sendRawTransaction = async (rawTxHex: string): Promise<TxHash> => {
+        await this._ready();
+        const headers = this._getHeaders();
+        const size = Math.max(1, rawTxHex.length / 2 / 1024); 
+        const timeout = Math.max(15000, 1000 * size); 
+
+        // 1. Preparar el envío a WhatsOnChain (tu implementación actual)
+        const wocRequest = superagent.post(`${this.apiPrefix()}/tx/raw`)
+            .timeout({
+                response: timeout,
+                deadline: 60000
+            })
+            .set(headers)
+            .send({ txhex: rawTxHex });
+
+        // 2. Preparar el envío a GorillaPool (basado en el código de referencia)
+        const gpRequest = superagent.post(this._mapiURL + 'tx')
+            .timeout({
+                response: timeout,
+                deadline: 60000,
+            })
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(rawTxHex, 'hex'));
+        
+        if (this._gorillaPoolApiKey) {
+            gpRequest.set('Authorization', `Bearer ${this._gorillaPoolApiKey}`);
+        }
+
+        // 3. Ejecutar ambos envíos en paralelo y obtener el primer resultado exitoso
+        try {
+            const responses = await Promise.allSettled([
+                wocRequest.then(res => ({ source: 'WhatsOnChain', result: res.body })),
+                gpRequest.then(res => {
+                    const payload = JSON.parse(res.body.payload);
+                    if (payload.returnResult === 'success') {
+                        return { source: 'GorillaPool', result: payload.txid };
+                    } else {
+                        throw new Error(`GorillaPool: ${payload.resultDescription}`);
+                    }
+                })
+            ]);
+
+            // Buscar el primer resultado exitoso
+            for (const response of responses) {
+                if (response.status === 'fulfilled') {
+                    console.log(`✅ Transacción aceptada por: ${response.value.source}`);
+                    return response.value.result; // Retorna el TXID
+                }
+            }
+
+            // Si ambos fallan, lanza el primer error
+            const firstRejection = responses.find(r => r.status === 'rejected');
+            if (firstRejection) {
+                throw new Error(firstRejection.reason.message || firstRejection.reason);
+            }
+            
+            throw new Error('Todos los intentos de envío fallaron');
+
+        } catch (error: any) {
+            if (error.response?.text) {
+                if (this.needIgnoreError(error.response.text)) {
+                    return new scryptlib.bsv.Transaction(rawTxHex).id;
+                }
+                throw new Error(`GNProvider ERROR: ${this.friendlyBIP22RejectionMsg(error.response.text)}`);
+            }
+            throw new Error(`GNProvider ERROR: ${error.message}`);
+        }
+    }*/
+
+    sendRawTransaction = async (rawTxHex: string): Promise<TxHash> => {
+        await this._ready();
+        const headers = this._getHeaders();
+        const size = Math.max(1, rawTxHex.length / 2 / 1024); 
+        const timeout = Math.max(15000, 1000 * size); 
+
+        const wocRequest = superagent.post(`${this.apiPrefix()}/tx/raw`)
+            .timeout({ response: timeout, deadline: 60000 })
+            .set(headers)
+            .send({ txhex: rawTxHex });
+
+        const gpRequest = superagent.post(this._mapiURL + 'tx')
+            .timeout({ response: timeout, deadline: 60000 })
+            .set('Content-Type', 'application/octet-stream')
+            .send(Buffer.from(rawTxHex, 'hex'));
+        
+        if (this._gorillaPoolApiKey) {
+            gpRequest.set('Authorization', `Bearer ${this._gorillaPoolApiKey}`);
+        }
+
+        try {
+            const responses = await Promise.allSettled([
+                wocRequest.then(res => ({ source: 'WhatsOnChain', result: res.body })),
+                gpRequest.then(res => {
+                    try {
+                        if (!res.body?.payload) {
+                            throw new Error('Respuesta inválida de GorillaPool: falta payload');
+                        }
+                        
+                        const payload = JSON.parse(res.body.payload);
+                        
+                        if (payload.returnResult === 'success') {
+                            return { source: 'GorillaPool', result: payload.txid };
+                        } else {
+                            throw new Error(`GorillaPool [${payload.returnResult || 'unknown'}]: ${payload.resultDescription || 'Sin descripción'}`);
+                        }
+                    } catch (parseError) {
+                        const message = parseError instanceof Error ? parseError.message : String(parseError);
+                        throw new Error(`GorillaPool: Error parsing response - ${message}`);
+                    }
+                })
+            ]);
+
+            for (const response of responses) {
+                if (response.status === 'fulfilled') {
+                    console.log(`✅ Transacción aceptada por: ${response.value.source}`);
+                    return response.value.result;
+                }
+            }
+
+            const firstRejection = responses.find(r => r.status === 'rejected');
+            if (firstRejection) {
+                throw new Error(firstRejection.reason.message || firstRejection.reason);
+            }
+            
+            throw new Error('Todos los intentos de envío fallaron');
+
         } catch (error: any) {
             if (error.response?.text) {
                 if (this.needIgnoreError(error.response.text)) {
