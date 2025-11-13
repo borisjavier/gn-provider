@@ -234,6 +234,33 @@ export class GNProvider extends Provider {
         await this._ready();
         const headers = this._getHeaders();
         const size = Math.max(1, rawTxHex.length / 2 / 1024); 
+        const timeout = Math.max(10000, 1000 * size); 
+        
+        try {
+            const res = await superagent.post(`${this.apiPrefix()}/tx/raw`)
+                .timeout({
+                    response: timeout,
+                    deadline: 60000
+                })
+                .set(headers)
+                .send({ txhex: rawTxHex });
+                
+            return res.body;
+        } catch (error: any) {
+            if (error.response?.text) {
+                if (this.needIgnoreError(error.response.text)) {
+                    return new scryptlib.bsv.Transaction(rawTxHex).id;
+                }
+                throw new Error(`GNProvider ERROR: ${this.friendlyBIP22RejectionMsg(error.response.text)}`);
+            }
+            throw new Error(`GNProvider ERROR: ${error.message}`);
+        }
+    }
+    
+    /*sendRawTransaction = async (rawTxHex: string): Promise<TxHash> => {
+        await this._ready();
+        const headers = this._getHeaders();
+        const size = Math.max(1, rawTxHex.length / 2 / 1024); 
         const timeout = Math.max(15000, 1000 * size); 
 
         const wocRequest = superagent.post(`${this.apiPrefix()}/tx/raw`)
@@ -296,7 +323,7 @@ export class GNProvider extends Provider {
             }
             throw new Error(`GNProvider ERROR: ${error.message}`);
         }
-    }
+    }*/
 
     sendTransaction = async (signedTx: scryptlib.bsv.Transaction): Promise<string> => {
     try {
