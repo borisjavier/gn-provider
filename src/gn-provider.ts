@@ -56,40 +56,34 @@ export class GNProvider extends Provider {
         const headers = this._getHeaders();
         
         try {
-            // Paso 1: Obtener la información de la cadena para obtener la altura actual
-            const chainInfoRes = await superagent.get(`${this.apiPrefix()}/chain/info`)
-                .set(headers);
-            
+            const chainInfoRes = await superagent.get(`${this.apiPrefix()}/chain/info`).set(headers);
             const currentHeight = chainInfoRes.body.blocks;
             
-            // Paso 2: Obtener las estadísticas del bloque actual
-            const blockStatsRes = await superagent.get(`${this.apiPrefix()}/block/height/${currentHeight}/stats`)
-                .set(headers);
-            
-            const blockStats = blockStatsRes.body;
-            const totalFee = blockStats.total_fee;
-            const size = blockStats.size;
-            
-            // Si el tamaño es 0, evitar división por cero
-            if (size === 0) {
-                throw new Error('Block size is zero');
-            }
-            
-            // Calcular tarifa por kilobyte: (total_fee * 1024) / size
-            const feePerKb = (totalFee * 1024) / size;
-            
-            // Aplicar un multiplicador para asegurar una tarifa competitiva (1.5x)
+            const blockStatsRes = await superagent.get(`${this.apiPrefix()}/block/height/${currentHeight}/stats`).set(headers);
+            const stats = blockStatsRes.body;
+
+            // 1. Extraer mediana de fee y tamaño medio de transacción
+            const medianFeePerTx = stats.median_fee; // Satoshis por transacción
+            const medianSizePerTx = stats.median_tx_size; // Bytes por transacción
+
+            if (!medianSizePerTx || medianSizePerTx === 0) throw new Error('Invalid block stats');
+
+            // 2. Calcular la tasa: (Satoshis / Bytes) * 1000 para obtener sat/kb
+            const feePerKb = (medianFeePerTx / medianSizePerTx) * 1000;
+
+            // 3. Aplicar multiplicador competitivo (1.5x es seguro en BSV)
             const competitiveFee = feePerKb * 1.5;
-            
-            // Establecer un mínimo de 50 sat/kb y un máximo de 5000 sat/kb para evitar valores extremos
-            const safeFee = Math.max(50, Math.min(competitiveFee, 5000));
-            
-            console.log(`Calculated fee rate: ${safeFee.toFixed(2)} sat/kb from block ${currentHeight}`);
+
+            // 4. SafeFee con tus nuevos límites
+            // Nota: Subimos el mínimo a 1.1 para asegurar prioridad sobre el polvo de la red
+            const safeFee = Math.max(1.1, Math.min(competitiveFee, 500));
+
+            console.log(`Calculated MEDIAN fee rate: ${safeFee.toFixed(2)} sat/kb`);
             return Math.round(safeFee * 100) / 100;
-            
+
         } catch (error) {
-            console.warn('Fee estimation from block stats failed, using fallback');
-            return 500; // Fallback a 500 sat/kb
+            console.warn('Fee estimation failed, using fallback');
+            return 1.1; // Fallback mucho más realista para BSV que 500
         }
     }
 
